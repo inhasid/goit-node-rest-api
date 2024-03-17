@@ -44,7 +44,7 @@ export async function addContact(data) {
   return newContact;
 }
 
-export async function updateContact(id, newData) {
+export async function updateContactById(id, newData) {
   const contacts = await listContacts();
   const index = contacts.findIndex((contact) => contact.id === id);
   if (index === -1) {
