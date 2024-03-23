@@ -24,7 +24,6 @@ export const getOneContact = async (req, res, next) => {
     if (!result) {
       throw HttpError(404, `Contact with id=${id} not found`);
     }
-
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -75,4 +74,15 @@ export const updateContact = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+export const updateStatusContact = async (req, res) => {
+  const { id } = req.params;
+  const favoredContact = await contactsService.updateStatusById(id, req.body, {
+    new: true,
+  });
+  if (!favoredContact) {
+    throw HttpError(404);
+  }
+  res.status(200).json(favoredContact);
 };
