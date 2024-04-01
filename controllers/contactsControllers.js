@@ -46,7 +46,7 @@ const deleteContact = async (req, res) => {
 
 const createContact = async (req, res) => {
   const { _id: owner } = req.user;
-  const result = await contactsService.addContact(...req.body, owner);
+  const result = await contactsService.addContact({ ...req.body, owner });
   if (!result) {
     throw HttpError(400);
   }
