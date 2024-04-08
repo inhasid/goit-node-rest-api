@@ -1,56 +1,21 @@
-import fs from "fs/promises";
-import path from "path";
-import { nanoid } from "nanoid";
+import Contact from "../models/Contact.js";
 
-const contactsPath = path.resolve("db", "contacts.json");
+export const listContacts = (filter = {}, setting = {}) =>
+  Contact.find(filter, "-createdAt -updatedAt", setting).populate(
+    "owner",
+    "name email"
+  );
 
-const updateContacts = (contacts) =>
-  fs.writeFile(contactsPath, JSON.stringify(contacts, null, 2));
+export const countContacts = (filter) => Contact.countDocuments(filter);
 
-export async function listContacts() {
-  const data = await fs.readFile(contactsPath);
+export const getContactById = (filter) => Contact.findOne(filter);
 
-  return JSON.parse(data);
-}
+export const removeContact = (filter) => Contact.findOneAndDelete(filter);
 
-export async function getContactById(contactId) {
-  const contacts = await listContacts();
-  const result = contacts.find((item) => item.id === contactId);
+export const addContact = (data) => Contact.create(data);
 
-  return result || null;
-}
+export const updateContact = (filter, data) =>
+  Contact.findOneAndUpdate(filter, data);
 
-export async function removeContact(contactId) {
-  const contacts = await listContacts();
-  const index = contacts.findIndex((item) => item.id === contactId);
-  if (index === -1) {
-    return null;
-  }
-  const [result] = contacts.splice(index, 1);
-  await updateContacts(contacts);
-
-  return result;
-}
-
-export async function addContact(data) {
-  const contacts = await listContacts();
-  const newContact = {
-    id: nanoid(),
-    ...data,
-  };
-  contacts.push(newContact);
-  await updateContacts(contacts);
-
-  return newContact;
-}
-
-export async function updateContactById(id, newData) {
-  const contacts = await listContacts();
-  const index = contacts.findIndex((contact) => contact.id === id);
-  if (index === -1) {
-    return null;
-  }
-  contacts[index] = { ...contacts[index], ...newData };
-  await updateContacts(contacts);
-  return contacts[index];
-}
+export const updateStatusById = (filter, data) =>
+  Contact.findOneAndUpdate(filter, data);

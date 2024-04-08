@@ -1,81 +1,132 @@
+import fs from "fs/promises";
+import path from "path";
+import Jimp from "jimp";
+
 import * as contactsService from "../services/contactsServices.js";
+
+import User from "../models/User.js";
+
+import ctrlWrapper from "../decorators/ctrlWrapper.js";
 
 import HttpError from "../helpers/HttpError.js";
 
-import {
-  createContactSchema,
-  updateContactSchema,
-} from "../schemas/contactsSchemas.js";
+const avatarPath = path.resolve("public", "avatars");
 
-export const getAllContacts = async (req, res, next) => {
-  try {
-    const result = await contactsService.listContacts();
+const getAllContacts = async (req, res) => {
+  const { _id: owner } = req.user;
 
-    res.json(result);
-  } catch (error) {
-    next(error);
+  const { page = 1, limit = 20, favorite } = req.query;
+  const skip = (page - 1) * limit;
+  const filter = favorite ? { $and: [{ owner }, { favorite }] } : { owner };
+
+  const result = await contactsService.listContacts(filter, { skip, limit });
+  const total = await contactsService.countContacts({ owner });
+  if (!result) {
+    throw HttpError(404, `Contacts not found`);
   }
+  res.json({
+    result,
+    total,
+  });
 };
 
-export const getOneContact = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const result = await contactsService.getContactById(id);
-    if (!result) {
-      throw HttpError(404, `Contact with id=${id} not found`);
-    }
-
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
+const getOneContact = async (req, res) => {
+  const { _id: owner } = req.user;
+  const { id } = req.params;
+  const result = await contactsService.getContactById({ owner, _id: id });
+  if (!result) {
+    throw HttpError(404, `Contact with id=${id} not found`);
   }
+
+  res.status(200).json(result);
 };
 
-export const deleteContact = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const result = await contactsService.removeContact(id);
-    if (!result) {
-      throw HttpError(404, `Contact with id=${id} not found`);
-    }
-
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
+const deleteContact = async (req, res) => {
+  const { _id: owner } = req.user;
+  const { id } = req.params;
+  const result = await contactsService.removeContact({ owner, _id: id });
+  if (!result) {
+    throw HttpError(404, `Contact with id=${id} not found`);
   }
+
+  res.status(200).json(result);
 };
 
-export const createContact = async (req, res, next) => {
-  try {
-    const { error } = createContactSchema.validate(req.body);
-    if (error) {
-      throw HttpError(400, error.message);
-    }
-    const result = await contactsService.addContact(req.body);
-
-    res.status(201).json(result);
-  } catch (error) {
-    next(error);
+const createContact = async (req, res) => {
+  const { _id: owner } = req.user;
+  const { path: oldPath, filename } = req.file;
+  const newPath = path.join(avatarPath, filename);
+  await fs.rename(oldPath, newPath);
+  const avatar = path.join("avatars", filename);
+  const result = await contactsService.addContact({
+    ...req.body,
+    avatar,
+    owner,
+  });
+  if (!result) {
+    throw HttpError(400);
   }
+  res.status(201).json(result);
 };
 
-export const updateContact = async (req, res, next) => {
-  try {
-    const { error } = updateContactSchema.validate(req.body);
-    if (error) {
-      throw HttpError(400, error.message);
-    }
-    const { id } = req.params;
-    // if (Object.keys(req.body).length === 0) {
-    //   throw HttpError(400, "Body must have at least one field");
-    // }
-    const result = await contactsService.updateContactById(id, req.body);
-    if (!result) {
-      throw HttpError(404, `Contact with id=${id} not found`);
-    }
-
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
+const updateContact = async (req, res) => {
+  const { _id: owner } = req.user;
+  const { id } = req.params;
+  const result = await contactsService.updateContact(
+    { owner, _id: id },
+    req.body
+  );
+  if (!result) {
+    throw HttpError(404, `Contact with id=${id} not found`);
   }
+
+  res.status(200).json(result);
+};
+
+const updateStatusContact = async (req, res) => {
+  const { _id: owner } = req.user;
+  const { id } = req.params;
+  const favoredContact = await contactsService.updateStatusById(
+    { owner, _id: id },
+    req.body,
+    {
+      new: true,
+    }
+  );
+  if (!favoredContact) {
+    throw HttpError(404);
+  }
+  res.status(200).json(favoredContact);
+};
+
+const updateAvatar = async (req, res) => {
+  if (!req.file) {
+    throw HttpError(400, "No file uploaded");
+  }
+
+  const { _id, email } = req.user;
+  const { path: oldPath, filename } = req.file;
+
+  Jimp.read(oldPath, (err, img) => {
+    if (err) throw err;
+    img.resize(250, 250).quality(60).greyscale().write(newPath);
+  });
+
+  const newFilename = `${email}_${filename}`;
+  const newPath = path.join(avatarPath, newFilename);
+  await fs.rename(oldPath, newPath);
+  const avatarURL = path.join("avatars", newFilename);
+  await User.findByIdAndUpdate(_id, { avatarURL });
+
+  res.status(200).json({ avatarURL });
+};
+
+export default {
+  getAllContacts: ctrlWrapper(getAllContacts),
+  getOneContact: ctrlWrapper(getOneContact),
+  createContact: ctrlWrapper(createContact),
+  updateContact: ctrlWrapper(updateContact),
+  deleteContact: ctrlWrapper(deleteContact),
+  updateStatusContact: ctrlWrapper(updateStatusContact),
+  updateAvatar: ctrlWrapper(updateAvatar),
 };
